@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Code Grabber</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0f172a;
+      color: #fff;
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+    
+    .header {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+    
+    .header-info h1 { 
+      font-size: 1.25rem; 
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+    
+    .header-info p { 
+      font-size: 0.875rem; 
+      color: #94a3b8; 
+      margin-top: 0.25rem;
+    }
+    
+    .camera-button {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border: none;
+      color: white;
+      width: 3.5rem;
+      height: 3.5rem;
+      border-radius: 1rem;
+      cursor: pointer;
+      font-size: 1.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    
+    .camera-button:active { 
+      transform: scale(0.95);
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    }
+    
+    .scanner-modal {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 1000;
+      display: none;
+      flex-direction: column;
+    }
+    
+    .scanner-modal.open { display: flex; }
+    
+    .video-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    #scanner-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .scan-frame {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(80%, 320px);
+      height: min(60%, 240px);
+      border: 4px solid #3b82f6;
+      border-radius: 1.5rem;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+      transition: all 0.3s ease;
+    }
+    
+    .scan-frame.scanning {
+      border-color: #fbbf24;
+    }
+    
+    .scan-frame.success {
+      border-color: #10b981;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6),
+                  inset 0 0 40px rgba(16, 185, 129, 0.4);
+      animation: successFlash 0.5s ease;
+    }
+    
+    @keyframes successFlash {
+      0%, 100% { border-color: #10b981; }
+      50% { border-color: #34d399; }
+    }
+    
+    .capture-button {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border: 3px solid #60a5fa;
+      color: white;
+      padding: 1.25rem 2.5rem;
+      border-radius: 1.5rem;
+      font-weight: 800;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.6),
+                  inset 0 2px 4px rgba(255, 255, 255, 0.2);
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    
+    .capture-button:active {
+      transform: translateX(-50%) scale(0.95);
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.5);
+    }
+    
+    .capture-button.success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-color: #34d399;
+      animation: capturePulse 0.5s ease;
+    }
+    
+    @keyframes capturePulse {
+      0%, 100% { transform: translateX(-50%) scale(1); }
+      50% { transform: translateX(-50%) scale(1.15); }
+    }
+    
+    .capture-icon {
+      font-size: 2rem;
+      line-height: 1;
+    }
+    
+    .capture-text {
+      font-size: 0.875rem;
+      line-height: 1;
+    }
+    
+    .scan-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+      animation: scanLine 2s ease-in-out infinite;
+    }
+    
+    @keyframes scanLine {
+      0%, 100% { transform: translateY(-100px); opacity: 0.5; }
+      50% { transform: translateY(100px); opacity: 1; }
+    }
+    
+
+    
+    .controls-panel {
+      background: #1e293b;
+      padding: 1.5rem;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+    }
+    
+    .controls-title {
+      font-size: 0.875rem;
+      color: #94a3b8;
+      text-align: center;
+      margin-bottom: 1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .input-group {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    
+    .code-input {
+      flex: 1;
+      background: #334155;
+      border: 2px solid #475569;
+      border-radius: 0.75rem;
+      padding: 0.875rem 1rem;
+      color: white;
+      font-size: 1rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    
+    .code-input:focus { 
+      border-color: #3b82f6;
+      background: #3d4e63;
+    }
+    
+    .button {
+      border: none;
+      padding: 0.875rem 1.75rem;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+      outline: none;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+    
+    .button:active { transform: scale(0.97); }
+    
+    .button-add { 
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+    
+    .button-close { 
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      width: 100%;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+    
+    .action-toolbar {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 0.875rem;
+      position: sticky;
+      top: 4.5rem;
+      z-index: 50;
+      display: none;
+      gap: 0.75rem;
+      justify-content: center;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    
+    .action-toolbar.show { display: flex; }
+    
+    .toolbar-button {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #334155;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+    
+    .toolbar-button:active { transform: scale(0.97); }
+    
+    .toolbar-button:disabled { 
+      opacity: 0.4; 
+      cursor: not-allowed;
+      transform: none !important;
+    }
+    
+    .toolbar-button.select:not(:disabled):active { background: #475569; }
+    
+    .toolbar-button.delete { 
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+    
+    .toolbar-button.delete:not(:disabled):active { 
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    }
+    
+    .main-content {
+      padding: 1.25rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 5rem 2rem;
+      color: #64748b;
+    }
+    
+    .empty-icon {
+      font-size: 5rem;
+      margin-bottom: 1.5rem;
+      opacity: 0.4;
+      filter: grayscale(1);
+    }
+    
+    .empty-state h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.75rem;
+      color: #94a3b8;
+      font-weight: 700;
+    }
+    
+    .empty-state p {
+      font-size: 1rem;
+      color: #64748b;
+    }
+    
+    .barcode-grid {
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: 1fr;
+    }
+    
+    @media (min-width: 640px) {
+      .barcode-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    
+    @media (min-width: 1024px) {
+      .barcode-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    
+    .barcode-card {
+      background: #1e293b;
+      border: 3px solid #334155;
+      border-radius: 1rem;
+      padding: 1.25rem;
+      position: relative;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    
+    .barcode-card:active { transform: scale(0.98); }
+    
+    .barcode-card.selected {
+      border-color: #3b82f6;
+      background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2),
+                  0 8px 24px rgba(59, 130, 246, 0.15);
+    }
+    
+    .selection-checkbox {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      width: 2rem;
+      height: 2rem;
+      border: 3px solid #475569;
+      background: #334155;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      z-index: 10;
+    }
+    
+    .barcode-card.selected .selection-checkbox {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border-color: #3b82f6;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    }
+    
+    .check-icon {
+      color: white;
+      font-size: 1.125rem;
+      font-weight: 900;
+      display: none;
+    }
+    
+    .barcode-card.selected .check-icon { display: block; }
+    
+    .barcode-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 2.5rem;
+    }
+    
+    .barcode-image {
+      background: white;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    
+    canvas { display: block; }
+
+    #qr-canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-info">
+      <h1>Code Grabber</h1>
+      <p id="code-counter">0 codes stored</p>
+    </div>
+    <button class="camera-button" onclick="startScanner()" aria-label="Open scanner">
+      📷
+    </button>
+  </header>
+
+  <div class="scanner-modal" id="scanner-modal">
+    <div class="video-container">
+      <video id="scanner-video" playsinline autoplay muted></video>
+      <canvas id="qr-canvas"></canvas>
+      <div class="scan-frame" id="scan-frame">
+        <div class="scan-line"></div>
+      </div>
+      <button class="capture-button" id="capture-btn" onclick="captureCode()">
+        <span class="capture-icon">📸</span>
+        <span class="capture-text">TAP TO CAPTURE</span>
+      </button>
+    </div>
+    <div class="controls-panel">
+      <div class="controls-title">Manual Entry</div>
+      <div class="input-group">
+        <input 
+          type="text" 
+          class="code-input" 
+          id="code-input" 
+          placeholder="Enter code: P-8-M866H750"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        >
+        <button class="button button-add" onclick="addNewCode()">Add</button>
+      </div>
+      <button class="button button-close" onclick="closeScanner()">Close</button>
+    </div>
+  </div>
+
+  <div class="action-toolbar" id="toolbar">
+    <button class="toolbar-button select" onclick="selectAllItems()" id="select-all-btn">
+      ✓ Select All
+    </button>
+    <button class="toolbar-button delete" onclick="removeSelected()" id="delete-btn">
+      🗑 Delete (<span id="selected-counter">0</span>)
+    </button>
+  </div>
+
+  <main class="main-content" id="content-area"></main>
+
+  <script>
+    let storedCodes = [];
+    let selectedIds = new Set();
+    let videoStream = null;
+    let scanningActive = false;
+    let currentDetectedCode = null;
+    let currentCodeType = null; // Track whether it's a 1D barcode or 2D code
+    let qrScanInterval = null;
+
+    function updateDisplay() {
+      const counter = document.getElementById('code-counter');
+      const toolbar = document.getElementById('toolbar');
+      const contentArea = document.getElementById('content-area');
+      const selectedCounter = document.getElementById('selected-counter');
+      const selectAllBtn = document.getElementById('select-all-btn');
+      const deleteBtn = document.getElementById('delete-btn');
+
+      counter.textContent = `${storedCodes.length} code${storedCodes.length !== 1 ? 's' : ''} stored`;
+      selectedCounter.textContent = selectedIds.size;
+      
+      toolbar.className = storedCodes.length > 0 ? 'action-toolbar show' : 'action-toolbar';
+      selectAllBtn.disabled = storedCodes.length > 0 && selectedIds.size === storedCodes.length;
+      deleteBtn.disabled = selectedIds.size === 0;
+
+      if (storedCodes.length === 0) {
+        contentArea.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📦</div>
+            <h2>No Codes Yet</h2>
+            <p>Tap the camera icon to start collecting codes</p>
+          </div>
+        `;
+      } else {
+        const grid = document.createElement('div');
+        grid.className = 'barcode-grid';
+        
+        storedCodes.forEach(item => {
+          const isSelected = selectedIds.has(item.id);
+          const card = document.createElement('div');
+          card.className = `barcode-card ${isSelected ? 'selected' : ''}`;
+          card.onclick = () => toggleSelection(item.id);
+          
+          card.innerHTML = `
+            <div class="selection-checkbox">
+              <span class="check-icon">✓</span>
+            </div>
+            <div class="barcode-wrapper">
+              <div class="barcode-image">
+                <canvas id="barcode-${item.id}"></canvas>
+              </div>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+        
+        contentArea.innerHTML = '';
+        contentArea.appendChild(grid);
+
+        requestAnimationFrame(() => {
+          storedCodes.forEach(item => {
+            if (item.type === '2d') {
+              drawQRCode(item.id, item.value);
+            } else {
+              drawCode128(item.id, item.value);
+            }
+          });
+        });
+      }
+    }
+
+    function drawQRCode(id, text) {
+      const canvas = document.getElementById(`barcode-${id}`);
+      if (!canvas) return;
+
+      // Clear the canvas first
+      const container = canvas.parentElement;
+      container.innerHTML = `<div id="qr-${id}" style="background: white; padding: 8px; border-radius: 8px;"></div>`;
+      
+      // Generate QR code (also works for Data Matrix visually)
+      new QRCode(document.getElementById(`qr-${id}`), {
+        text: text,
+        width: 200,
+        height: 200,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }
+
+    function drawCode128(id, text) {
+      const canvas = document.getElementById(`barcode-${id}`);
+      if (!canvas) return;
+
+      const width = 240;
+      const height = 100;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      const patterns = {
+        '0':'11011001100','1':'11001101100','2':'11001100110','3':'10010011000','4':'10010001100',
+        '5':'10001001100','6':'10011001000','7':'10011000100','8':'10001100100','9':'11001001000',
+        'A':'11001000100','B':'11000100100','C':'10110011100','D':'10011011100','E':'10011001110',
+        'F':'10111001000','G':'10011101000','H':'10011100010','I':'11001110010','J':'11001011100',
+        'K':'11001001110','L':'11011100100','M':'11001110100','N':'11101101110','O':'11101001100',
+        'P':'11100101100','Q':'11100100110','R':'11101100100','S':'11100110100','T':'11100110010',
+        'U':'11011011000','V':'11011000110','W':'11000110110','X':'10100011000','Y':'10001011000',
+        'Z':'10001000110',' ':'10110001000','-':'10001101000','.':'10001100010',
+        'START_B':'11010010000','STOP':'1100011101011'
+      };
+
+      const charValues = {' ':0,'!':1,'"':2,'#':3,'$':4,'%':5,'&':6,"'":7,'(':8,')':9,'*':10,'+':11,',':12,'-':13,'.':14,'/':15,'0':16,'1':17,'2':18,'3':19,'4':20,'5':21,'6':22,'7':23,'8':24,'9':25,':':26,';':27,'<':28,'=':29,'>':30,'?':31,'@':32,'A':33,'B':34,'C':35,'D':36,'E':37,'F':38,'G':39,'H':40,'I':41,'J':42,'K':43,'L':44,'M':45,'N':46,'O':47,'P':48,'Q':49,'R':50,'S':51,'T':52,'U':53,'V':54,'W':55,'X':56,'Y':57,'Z':58,'[':59,'\\':60,']':61,'^':62,'_':63};
+
+      let barcodePattern = patterns.START_B;
+      let checksumValue = 104;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const numericValue = charValues[char] || 0;
+        const patternKey = char.toUpperCase();
+        if (patterns[patternKey] || patterns[char]) {
+          barcodePattern += patterns[patternKey] || patterns[char];
+          checksumValue += numericValue * (i + 1);
+        }
+      }
+
+      checksumValue = checksumValue % 103;
+      const checksumChar = Object.keys(charValues).find(k => charValues[k] === checksumValue) || '0';
+      barcodePattern += patterns[checksumChar.toUpperCase()] || patterns['0'];
+      barcodePattern += patterns.STOP;
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+
+      const barWidth = width / barcodePattern.length;
+      let xPosition = 0;
+
+      ctx.fillStyle = '#000000';
+      for (let i = 0; i < barcodePattern.length; i++) {
+        if (barcodePattern[i] === '1') {
+          ctx.fillRect(xPosition, 0, barWidth, height * 0.85);
+        }
+        xPosition += barWidth;
+      }
+
+      ctx.fillStyle = '#000000';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, width / 2, height * 0.95);
+    }
+
+    function showScanSuccess() {
+      const frame = document.getElementById('scan-frame');
+      const captureBtn = document.getElementById('capture-btn');
+      
+      frame.classList.add('success');
+      captureBtn.classList.add('success');
+      captureBtn.innerHTML = `
+        <span class="capture-icon">✓</span>
+        <span class="capture-text">CAPTURED!</span>
+      `;
+      
+      setTimeout(() => {
+        frame.classList.remove('success');
+        captureBtn.classList.remove('success');
+        captureBtn.innerHTML = `
+          <span class="capture-icon">📸</span>
+          <span class="capture-text">TAP TO CAPTURE</span>
+        `;
+        currentDetectedCode = null;
+      }, 1000);
+    }
+
+    function captureCode() {
+      if (currentDetectedCode) {
+        storedCodes.push({
+          id: Date.now(),
+          value: currentDetectedCode,
+          type: currentCodeType || '1d', // '1d' for barcode, '2d' for QR/DataMatrix
+          timestamp: new Date().toISOString()
+        });
+        
+        showScanSuccess();
+        updateDisplay();
+      } else {
+        const captureBtn = document.getElementById('capture-btn');
+        captureBtn.innerHTML = `
+          <span class="capture-icon">❌</span>
+          <span class="capture-text">NO CODE DETECTED</span>
+        `;
+        
+        setTimeout(() => {
+          captureBtn.innerHTML = `
+            <span class="capture-icon">📸</span>
+            <span class="capture-text">TAP TO CAPTURE</span>
+          `;
+        }, 1000);
+      }
+    }
+
+    function scanQRCode() {
+      if (!scanningActive) return;
+      
+      const video = document.getElementById('scanner-video');
+      const canvas = document.getElementById('qr-canvas');
+      const ctx = canvas.getContext('2d');
+      const captureBtn = document.getElementById('capture-btn');
+      
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        
+        if (code && code.data) {
+          currentDetectedCode = code.data;
+          currentCodeType = '2d'; // Mark as 2D code (QR/DataMatrix)
+          captureBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+          captureBtn.style.borderColor = '#34d399';
+        } else {
+          // Only reset if we don't have a barcode detection
+          if (!currentDetectedCode || currentCodeType === '2d') {
+            currentDetectedCode = null;
+            currentCodeType = null;
+            captureBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+            captureBtn.style.borderColor = '#60a5fa';
+          }
+        }
+      }
+    }
+
+    async function startScanner() {
+      const modal = document.getElementById('scanner-modal');
+      modal.classList.add('open');
+      scanningActive = true;
+      
+      try {
+        console.log('Requesting camera access...');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }, 
+          audio: false 
+        });
+        
+        console.log('Camera access granted!');
+        videoStream = stream;
+        
+        const videoElement = document.getElementById('scanner-video');
+        videoElement.srcObject = stream;
+        
+        await videoElement.play();
+        console.log('Video playing');
+        
+        // Start QR code scanning
+        qrScanInterval = setInterval(scanQRCode, 200);
+        
+        // Start barcode scanning with Quagga
+        setTimeout(() => {
+          if (scanningActive) {
+            startBarcodeScanning();
+          }
+        }, 1000);
+        
+      } catch (error) {
+        console.error('Camera error:', error);
+        scanningActive = false;
+        
+        let alertMessage = 'Camera Access Error\n\n';
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          alertMessage += '❌ Permission Denied\n\n';
+          alertMessage += 'Please allow camera access:\n';
+          alertMessage += '1. Look for the camera icon in your address bar\n';
+          alertMessage += '2. Click it and select "Allow"\n';
+          alertMessage += '3. Refresh the page and try again\n\n';
+          alertMessage += 'You can still enter codes manually.';
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          alertMessage += '❌ No Camera Found\n\n';
+          alertMessage += 'No camera detected on this device.\n';
+          alertMessage += 'You can enter codes manually.';
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+          alertMessage += '❌ Camera In Use\n\n';
+          alertMessage += 'Camera is being used by another app.\n';
+          alertMessage += 'Close other camera apps and try again.';
+        } else {
+          alertMessage += '❌ Unknown Error\n\n';
+          alertMessage += `Error: ${error.message}\n\n`;
+          alertMessage += 'You can enter codes manually.';
+        }
+        
+        alert(alertMessage);
+      }
+      
+      setTimeout(() => {
+        document.getElementById('code-input').focus();
+      }, 400);
+    }
+
+    function startBarcodeScanning() {
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: document.querySelector('#scanner-video'),
+          constraints: {
+            facingMode: "environment"
+          }
+        },
+        decoder: {
+          readers: [
+            "code_128_reader",
+            "ean_reader",
+            "ean_8_reader",
+            "code_39_reader",
+            "code_39_vin_reader",
+            "codabar_reader",
+            "upc_reader",
+            "upc_e_reader",
+            "i2of5_reader"
+          ]
+        },
+        locate: true
+      }, function(err) {
+        if (err) {
+          console.log('Quagga initialization error:', err);
+          return;
+        }
+        console.log("Barcode scanner initialized");
+        Quagga.start();
+      });
+
+      Quagga.onDetected(function(result) {
+        if (!scanningActive) return;
+        
+        const code = result.codeResult.code;
+        const captureBtn = document.getElementById('capture-btn');
+        
+        if (code) {
+          currentDetectedCode = code;
+          currentCodeType = '1d'; // Mark as 1D barcode
+          captureBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+          captureBtn.style.borderColor = '#34d399';
+        }
+      });
+    }
+
+    function closeScanner() {
+      const modal = document.getElementById('scanner-modal');
+      modal.classList.remove('open');
+      scanningActive = false;
+      currentDetectedCode = null;
+      currentCodeType = null;
+      
+      if (qrScanInterval) {
+        clearInterval(qrScanInterval);
+        qrScanInterval = null;
+      }
+      
+      if (Quagga) {
+        Quagga.stop();
+      }
+      
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+        console.log('Camera stopped');
+      }
+      
+      document.getElementById('code-input').value = '';
+    }
+
+    function addNewCode() {
+      const input = document.getElementById('code-input');
+      const codeValue = input.value.trim();
+      
+      if (codeValue) {
+        storedCodes.push({
+          id: Date.now(),
+          value: codeValue,
+          type: '1d', // Manual entries default to 1D barcode
+          timestamp: new Date().toISOString()
+        });
+        
+        input.value = '';
+        updateDisplay();
+      }
+    }
+
+    function toggleSelection(id) {
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+      } else {
+        selectedIds.add(id);
+      }
+      updateDisplay();
+    }
+
+    function selectAllItems() {
+      selectedIds = new Set(storedCodes.map(code => code.id));
+      updateDisplay();
+    }
+
+    function removeSelected() {
+      if (selectedIds.size === 0) return;
+      
+      storedCodes = storedCodes.filter(code => !selectedIds.has(code.id));
+      selectedIds.clear();
+      updateDisplay();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('Code Grabber loaded - Ready to scan!');
+      
+      document.getElementById('code-input').addEventListener('keypress', event => {
+        if (event.key === 'Enter') {
+          addNewCode();
+        }
+      });
+      
+      updateDisplay();
+    });
+  </script>
+
+</body>
+</html>
